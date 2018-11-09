@@ -1,0 +1,185 @@
+%clear
+% ---------------------------------------------------------------------- %
+% 実験設定。
+% クエリ数を変更した際にはデータセットを新しく用意する必要があります。
+% ---------------------------------------------------------------------- %
+%実験名
+exName = 'ex0801stl';
+%フォルダ（outputフォルダ & mファイル）
+[filepath, name, ext]=fileparts([mfilename('fullpath'),'.m']);
+Dir_kume = filepath;
+% モデルサイズの設定。有効な値は以下の通り。
+% 16, 32, 40, 48, 56, 64, 80, 96
+ModelSize = 40;     % 40
+% モデルサイズの設定。任意の値が有効。
+imgSize = 64;       % 64
+% モデルタイプごとのクエリ数。基本5。
+nQuery = 5;
+% データセットを新しく用意するかどうか。
+%   true - 用意する／false - 用意しない
+PrepareDataSet = false;
+% クエリ・データベースのGeodesic sphereのID。
+DatabaseGeodesicID = 2;
+QueryGeodesicID = 2;
+% Geodesic ID(1 ～ 7)に対応する投影枚数。
+% 例：Geodesic IDが1のとき，投影枚数は12枚。
+nProjections = [12, 42, 92, 162, 252, 362, 492];
+% 
+% クエリ・データベースの部分空間の使用次元数。
+rDatabase = 5;
+rQuery = 5;
+% 特徴の高周波成分削減回数。
+nDivide = 0;
+% ---------------------------------------------------------------------- %
+
+current_path = pwd;
+
+cRetrieval = tic;
+
+% モデルタイプの名称とモデルタイプの数。
+% 基本的にはClutch, Die, Gearの3種類。
+% TypeName = {'Clutch'; 'Die'; 'Gear';};
+TypeName = {'clutch'; 'die'; 'gear';};
+nModelType = length(TypeName);
+
+%cd(Dir_kume);
+
+CulcProcessingTime_forSato(exName, DatabaseGeodesicID, QueryGeodesicID, imgSize, TypeName);
+
+[QueryProjection,DatabaseProjection] = InteglatePrj_forSato(exName, DatabaseGeodesicID, QueryGeodesicID, imgSize, TypeName);
+
+%cd(current_path);
+% %{
+DatabaseName = fieldnames(DatabaseProjection);
+QueryName    = fieldnames(QueryProjection);
+
+cDatabaseExtraction = tic;
+% データベース側の特徴抽出処理
+disp('データベース側の特徴抽出処理を実行中');
+for iDatabase = 1 : length(DatabaseName)
+    tDatabaseProjection = DatabaseProjection.(DatabaseName{iDatabase});
+    % 投影画像の重み付け
+    DatabaseWeightedProjection = ...
+        WeightingProjection(tDatabaseProjection);
+    % 特徴抽出処理
+    DatabaseFeature.(DatabaseName{iDatabase}) = ...
+        DescriptorForMSM(DatabaseWeightedProjection, nDivide);
+end
+ExperimentTime.DatabaseExtraction = toc(cDatabaseExtraction);
+fprintf('処理時間：%f[s]\n', ExperimentTime.DatabaseExtraction);
+
+% データベース側の部分空間の生成
+cDatabaseSubspace = tic;
+disp('データベース側の部分空間生成処理を実行中');
+for iDatabase = 1 : length(DatabaseName)
+    tDatabaseFeature = DatabaseFeature.(DatabaseName{iDatabase});
+    LabelList = fieldnames(tDatabaseFeature);
+    for iLabel = 1 : length(LabelList)
+        [tDatabaseSubspace] = ...
+            EVD(tDatabaseFeature.(LabelList{iLabel}), rDatabase);
+        DatabaseSubspace.(DatabaseName{iDatabase}).(LabelList{iLabel}) = ...
+            tDatabaseSubspace;
+    end
+end
+ExperimentTime.DatabaseSubspace = toc(cDatabaseSubspace);
+fprintf('処理時間：%f[s]\n', ExperimentTime.DatabaseSubspace);
+
+cQueryExtraction = tic;
+% クエリ側の特徴抽出処理
+disp('クエリ側の特徴抽出処理を実行中');
+for iQuery = 1 : length(QueryName)
+    tQueryProjection = QueryProjection.(QueryName{iQuery});
+    % 投影画像の重み付け
+    QueryWeightedProjection = ...
+        WeightingProjection(tQueryProjection);
+    % 特徴抽出処理
+    QueryFeature.(QueryName{iQuery}) = ...
+        DescriptorForMSM(QueryWeightedProjection, nDivide);
+end
+ExperimentTime.QueryExtraction = toc(cQueryExtraction);
+fprintf('処理時間：%f[s]\n', ExperimentTime.QueryExtraction);
+
+% クエリ側の部分空間の生成
+cQuerySubspace = tic;
+disp('クエリ側の部分空間生成処理を実行中');
+for iQuery = 1 : length(QueryName)
+    tQueryFeature = QueryFeature.(QueryName{iQuery});
+    LabelList = fieldnames(tQueryFeature);
+    for iLabel = 1 : length(LabelList)
+        [tQuerySubspace] = ...
+            EVD(tQueryFeature.(LabelList{iLabel}), rQuery);
+        QuerySubspace.(QueryName{iQuery}).(LabelList{iLabel}) = ...
+            tQuerySubspace;
+    end
+end
+ExperimentTime.QuerySubspace = toc(cQuerySubspace);
+fprintf('処理時間：%f[s]\n', ExperimentTime.QuerySubspace);
+
+Similarity = zeros(length(QueryName), length(DatabaseName)); % 各モデルとクエリとの類似度を格納する配列。
+
+ExperimentTime.Matching = 0;
+disp('モデル間の距離を相互部分空間法によって計算中');
+for iQuery = 1 : length(QueryName)
+    tQuerySubspace = QuerySubspace.(QueryName{iQuery});
+    for iDatabase = 1 : length(DatabaseName)
+        tDatabaseSubspace = DatabaseSubspace.(DatabaseName{iDatabase});
+        % データベースモデルとの距離を計算
+        cMatching = tic;
+        LabelList = fieldnames(tQuerySubspace);
+        % 部分空間による距離計算
+        tSimilarity = 0;
+        for iLabel = 1 : length(LabelList)
+            U = tQuerySubspace.(LabelList{iLabel});
+            V = tDatabaseSubspace.(LabelList{iLabel});
+            tSimilarity = tSimilarity + MSM(U, V);
+        end
+        tSimilarity = tSimilarity / length(LabelList);
+        Similarity(iQuery, iDatabase) = tSimilarity;
+        ExperimentTime.Matching = ExperimentTime.Matching + toc(cMatching);
+    end
+end
+fprintf('処理時間：%f[s]\n', ExperimentTime.Matching);
+
+% 正解率を算出する。
+for iModelType = 1 : nModelType
+    TrueModelIndex = 5 * (iModelType - 1) + (1:5)';
+    TopIndex = nQuery * (iModelType - 1) + 1;
+    BottomIndex = nQuery * iModelType;
+    tSimilarity = Similarity(TopIndex : BottomIndex, :);
+    [~, MinIndex] = min(tSimilarity, [], 2);
+    Accuracy.(TypeName{iModelType}) = sum(MinIndex == TrueModelIndex) / nQuery;
+end
+
+ExperimentTime.Total = toc(cRetrieval);
+fprintf('プログラム全体の処理時間：%f[s]\n', ExperimentTime.Total);
+
+% 結果を構造体としてまとめる。
+ExperimentResult.SimilarityMatrix = Similarity;
+ExperimentResult.Accuracy = Accuracy;
+ExperimentResult.ExperimentTime = ExperimentTime;
+
+% データセットを構造体としてまとめる。
+%DataSet.ShiftVector = ShiftVector;
+%DataSet.RotateVector = RotateVector;
+
+% 結果を保存する。
+FileName = sprintf('Result_GDID_D%dQ%d_Query%d_%s', ...
+                    DatabaseGeodesicID, QueryGeodesicID, nQuery, exName);
+% save(FileName, 'ExperimentResult', 'DataSet');
+save([Dir_kume, FileName], 'ExperimentResult');
+
+% 結果を Excel にまとめる
+aStruct = ExperimentResult;             % output structure
+excelFileName = [FileName, '.xlsx'];    % filename
+sheet = 1;                              % sheet number
+startCell = [5,5];                      % startpoint
+writingSize = [50,50];                  % size
+aCell = cell(writingSize);
+xlRange = xlsrange2(startCell, writingSize);    % requires 'xlsrange.m' and 'xlscol.m'
+[aCell,row,col] = struct2cell4excel(aCell, aStruct, 1, 1);
+
+% xlswrite([Dir_kume, FileName],aCell,sheet,xlRange)
+% % The XLSWRITE function can not generate an Excel file on the Mac OS,
+% % but instead saves the file in CSV (Comma Separated) format.
+
+%}
