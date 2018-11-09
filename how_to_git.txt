@@ -121,3 +121,14 @@ URL:https://qiita.com/nnahito/items/e546b27f73e7be131d4e
   $ git branch -d ブランチ名
 
 ---
+【author や comitter の名前, メールアドレスを変更する】
+0) github の settings から登録名と登録メールアドレスを変更する
+
+1) comitter を変更したいディレクトリへ移動する
+
+2) filterを利用して, ローカルリポジトリの保存内容を変更する
+$ git filter-branch -f --env-filter "GIT_AUTHOR_NAME='名前'; GIT_AUTHOR_EMAIL='メールアドレス'; GIT_COMMITTER_NAME='名前'; GIT_COMMITTER_EMAIL='メールアドレス';" HEAD
+
+3) force push でリモートリポジトルのコミット履歴を上書きする
+git push -f
+
