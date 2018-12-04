@@ -1,18 +1,19 @@
-% demo_RotationSHT
+% demo_RotationSH
 % 
 % 
 
 % load data
 [Ymn,THETA,PHI,Xm,Ym,Zm] = spharm(2,1,[55 55],0);
 field = Ymn;
-% field = real(field);
 
 % plot
-[handle_figure,handle_surf] = plotSphere(field,'imag',[],[]);
+[handle_figure,handle_surf] = plotSphere(field);
 
     % Create slider
-    slider_theta = uicontrol('Style','slider','Min',-2*pi,'Max',2*pi,'Value',0,'Position', [400 40 120 20]);
-    slider_phi   = uicontrol('Style','slider','Min',-2*pi,'Max',2*pi,'Value',0,'Position', [400 15 120 20]);
+    slider_theta = uicontrol('Style', 'slider',...
+        'Min',-2*pi,'Max',2*pi,'Value',0,'Position', [400 40 120 20]);
+    slider_phi = uicontrol('Style', 'slider',...
+        'Min',-2*pi,'Max',2*pi,'Value',0,'Position', [400 15 120 20]);
     
     % Add a text uicontrol to label the slider.
     legend_real_plus = uicontrol('Style','text','Position',[10 90 60 20],'String','Real(+)','ForegroundColor',[255,0,13]/255,'BackgroundColor','w');
@@ -21,8 +22,8 @@ field = Ymn;
     legend_imag_minus = uicontrol('Style','text','Position',[10 15 60 20],'String','Imag(-)','ForegroundColor',[13,255,0]/255,'BackgroundColor','k');
     
     % Add a text uicontrol to label the slider.
-    slider_label_theta = uicontrol('Style','text','Position',[380 40 20 20],'String','É∆');
-    slider_label_phi = uicontrol('Style','text','Position',[380 15 20 20],'String','É”');
+    slider_label_theta = uicontrol('Style','text','Position',[380 40 20 20],'String','Œ∏');
+    slider_label_phi = uicontrol('Style','text','Position',[380 15 20 20],'String','œÜ');
 
     % make event listener
     addlistener(slider_theta,'Value','PostSet',@(event,obj) update(event,obj,field,handle_surf,slider_theta,slider_phi));
