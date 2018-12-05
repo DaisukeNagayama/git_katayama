@@ -1,0 +1,15 @@
+clutch
+die
+gear
+mould
+hydraulic
+pvb
+steamtrap
+swashplate
+clutch_die
+die_gear
+gear_mould
+mould_clutch
+clutch_8
+keo
+morton
